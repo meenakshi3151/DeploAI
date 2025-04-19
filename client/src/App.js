@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axios from "axios";
+import "./App.css"; // custom CSS file
 
 const App = () => {
   const [repoUrl, setRepoUrl] = useState("");
@@ -32,47 +33,41 @@ const App = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-      <div className="bg-white shadow-lg rounded-xl p-6 w-full max-w-md space-y-4">
-        <h1 className="text-2xl font-bold text-center text-gray-800">DeploAI</h1>
+    <div className="app-container">
+      <div className="form-box">
+        <h1 className="app-title">DeploAI</h1>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-600">Git Repository URL</label>
+        <div className="form-group">
+          <label>Git Repository URL</label>
           <input
             type="text"
             value={repoUrl}
             onChange={(e) => setRepoUrl(e.target.value)}
-            className="w-full mt-1 p-2 border border-gray-300 rounded"
             placeholder="https://github.com/..."
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-600">Port Number</label>
+        <div className="form-group">
+          <label>Port Number</label>
           <input
             type="number"
             value={port}
             onChange={(e) => setPort(e.target.value)}
-            className="w-full mt-1 p-2 border border-gray-300 rounded"
             placeholder="3000"
           />
         </div>
 
-        <button
-          onClick={handleDeploy}
-          disabled={loading}
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-        >
+        <button onClick={handleDeploy} disabled={loading}>
           {loading ? "Deploying..." : "Deploy"}
         </button>
 
         {response && (
-          <div className="mt-4 text-green-600 text-sm break-all">
+          <div className="response success">
             <pre>{JSON.stringify(response, null, 2)}</pre>
           </div>
         )}
         {error && (
-          <div className="mt-4 text-red-600 text-sm">
+          <div className="response error">
             Error: {error}
           </div>
         )}
