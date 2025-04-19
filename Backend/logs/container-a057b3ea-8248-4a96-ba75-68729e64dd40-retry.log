@@ -7,8 +7,17 @@
 (node:26) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
 Starting the development server...
 
-Failed to compile.
+Compiled successfully!
 
-[eslint] 
-src/App.js
-Syntax error: Unterminated JSX contents. (7:10) (7:10)
+You can now view hello-shikhar-app in the browser.
+
+  Local:            http://localhost:3000
+  On Your Network:  http://172.17.0.3:3000
+
+Note that the development build is not optimized.
+To create a production build, use npm run build.
+
+webpack compiled successfully
+Compiling...
+Compiled successfully!
+webpack compiled successfully
