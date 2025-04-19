@@ -11,12 +11,14 @@
   "description": "",
   "dependencies": {
     "@julep/sdk": "^1.71.5",
+    "@ngrok/ngrok": "^1.5.0",
     "body-parser": "^2.2.0",
     "child_process": "^1.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "fs": "^0.0.1-security",
+    "ngrok": "^5.0.0-beta.2",
     "path": "^0.12.7",
     "simple-git": "^3.27.0",
     "uuid": "^11.1.0"

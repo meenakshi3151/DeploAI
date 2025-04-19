@@ -1,14 +1,17 @@
 // index.js
 const express = require("express");
-const { exec, spawn } = require("child_process");
-const cors = require("cors");
+const { spawn } = require("child_process");
+const util = require("util");
 const fs = require("fs");
 const path = require("path");
+const cors = require("cors");
 const bodyParser = require("body-parser");
 const { v4: uuidv4 } = require("uuid");
 
+const exec = util.promisify(require("child_process").exec);
+const ngrok = require("ngrok");
+
 const { generateDockerfileFromRepo } = require("./dockerGen");
-// const { fixDockerErrorWithAI } = require("./dockerFixer");
 const { fixSourceCodeWithAI } = require("./dockerFixer");
 
 const app = express();
@@ -28,206 +31,126 @@ app.post("/run", async (req, res) => {
   const tempPath = path.join(WORKDIR, id);
   let localPort = 4000 + Math.floor(Math.random() * 1000);
   const internalPort = config.port || 3000;
+  let responded = false;
 
-  let responded = false; // ✅ Prevent double response
+  try {
+    console.log("Cloning repo:", repoUrl);
+    await exec(`git clone ${repoUrl} ${tempPath}`);
 
-  console.log("Cloning repo:", repoUrl);
+    const dockerfilePath = path.join(tempPath, "Dockerfile");
+    if (!fs.existsSync(dockerfilePath)) {
+      console.log("No Dockerfile found. Generating with AI...");
+      const dockerfileContent = await generateDockerfileFromRepo(repoUrl);
+      const match = dockerfileContent.match(/```(?:dockerfile)?\n([\s\S]*?)```/i);
+      const cleanDockerfile = match ? match[1].trim() : dockerfileContent.trim();
+      fs.writeFileSync(dockerfilePath, cleanDockerfile);
+      console.log("📝 Generated Dockerfile:\n", cleanDockerfile);
+    }
 
-  exec(`git clone ${repoUrl} ${tempPath}`, async (err) => {
-    if (err) return res.status(500).json({ error: "Git clone failed" });
+    if (config.env) {
+      const envContent = Object.entries(config.env)
+        .map(([k, v]) => `${k}=${v}`)
+        .join("\n");
+      fs.writeFileSync(path.join(tempPath, ".env"), envContent);
+    }
 
+    const imageName = `image-${id}`;
+    console.log("🔧 Building Docker image...");
     try {
-      const dockerfilePath = path.join(tempPath, "Dockerfile");
+      await exec(`docker build -t ${imageName} ${tempPath}`);
+    } catch (err) {
+      console.error("❌ Docker build failed:", err.stderr);
+      return res.status(500).json({ error: "Docker build failed", details: err.stderr });
+    }
 
-      // Step 1: Generate Dockerfile if it doesn't exist
-      if (!fs.existsSync(dockerfilePath)) {
-        console.log("No Dockerfile found. Generating with AI...");
+    await runContainer("");
 
-        const dockerfileContent = await generateDockerfileFromRepo(repoUrl);
-        const dockerfileMatch = dockerfileContent.match(
-          /```(?:dockerfile)?\n([\s\S]*?)```/i
-        );
-        const cleanDockerfile = dockerfileMatch
-          ? dockerfileMatch[1].trim()
-          : dockerfileContent.trim();
-        fs.writeFileSync(dockerfilePath, cleanDockerfile);
-        console.log("📝 Generated Dockerfile:\n", cleanDockerfile);
+    async function runContainer(retryTag = "") {
+      const containerName = `container-${id}${retryTag}`;
+      await exec(`docker rm -f ${containerName}`).catch(() => {});
+      console.log(`🚀 Running container: ${containerName}`);
+
+      try {
+        await exec(`docker run -d -p ${localPort}:${internalPort} --name ${containerName} ${imageName}`);
+      } catch (err) {
+        console.error("🚨 Docker run failed:", err.stderr);
+        if (!responded) {
+          responded = true;
+          return res.status(500).json({ error: "Run failed", logs: err.stderr });
+        }
+        return;
       }
 
-      // Step 2: Create .env file if provided
-      if (config.env) {
-        const envContent = Object.entries(config.env)
-          .map(([k, v]) => `${k}=${v}`)
-          .join("\n");
-        fs.writeFileSync(path.join(tempPath, ".env"), envContent);
-      }
+      const logFilePath = path.join(LOGDIR, `${containerName}.log`);
+      const logStream = fs.createWriteStream(logFilePath);
+      const logProcess = spawn("docker", ["logs", "-f", containerName]);
+      logProcess.stdout.pipe(logStream);
+      logProcess.stderr.pipe(logStream);
 
-      // Step 3: Build Docker image
-      const imageName = `image-${id}`;
-      console.log("🔧 Building Docker image...");
-      exec(
-        `docker build -t ${imageName} ${tempPath}`,
-        async (err, stdout, stderr) => {
-          if (err) {
-            console.error("❌ Docker Build Error:", stderr);
-            // const originalDockerfile = fs.readFileSync(dockerfilePath, "utf8");
+      let logBuffer = "";
+      const handleLogChunk = async (chunk) => {
+        const text = chunk.toString();
+        logBuffer += text;
 
-            //   try {
-            //     const fixedDockerfile = await fixDockerErrorWithAI(
-            //       originalDockerfile,
-            //       stderr
-            //     );
-            //     fs.writeFileSync(dockerfilePath, fixedDockerfile);
-            //     console.log("🛠 Dockerfile fixed. Retrying build...");
+        if (
+          text.includes("ReferenceError") ||
+          text.includes("is not defined") ||
+          text.includes("Module not found") ||
+          text.includes("Cannot find module") ||
+          text.includes("SyntaxError") ||
+          text.includes("Failed to compile") ||
+          text.includes("Traceback")
+        ) {
+          console.log("❌ Runtime error detected. Sending to AI to fix...");
+          logProcess.kill();
 
-            //     exec(
-            //       `docker build -t ${imageName} ${tempPath}`,
-            //       (err2, stdout2, stderr2) => {
-            //         if (err2) {
-            //           if (!responded) {
-            //             responded = true;
-            //             return res.status(500).json({
-            //               error: "AI fix failed. Still can't build image.",
-            //               originalError: stderr,
-            //               aiFixError: stderr2,
-            //             });
-            //           }
-            //         }
-            //         runContainer();
-            //       }
-            //     );
-            //   } catch (fixErr) {
-            //     if (!responded) {
-            //       responded = true;
-            //       return res.status(500).json({
-            //         error: "Docker build failed, and AI fix failed too.",
-            //         originalError: stderr,
-            //         fixError: fixErr.message,
-            //       });
-            //     }
-            //   }
-            //   return;
-            // }
-          }
-          runContainer();
-
-          // Step 4: Run the container and monitor logs
-          function runContainer(retryTag = "") {
-            const containerName = `container-${id}${retryTag}`;
-            const runCmd = `docker run -d -p ${localPort}:${internalPort} --name ${containerName} ${imageName}`;
-            localPort = localPort + 1;
-            console.log(
-              `🧹 Cleaning up any previous container named ${containerName}...`
-            );
-            exec(`docker rm -f ${containerName}`, () => {
-              console.log(`🚀 Running container: ${containerName}`);
-              exec(runCmd, (err) => {
-                if (err) {
-                  console.error("🚨 Docker run failed:", err.message);
-                  if (!responded) {
-                    responded = true;
-                    return res
-                      .status(500)
-                      .json({ error: "Run failed", logs: err.message });
-                  }
-                  return;
-                }
-
-                const logFilePath = path.join(LOGDIR, `${containerName}.log`);
-                const logStream = fs.createWriteStream(logFilePath);
-                const logProcess = spawn("docker", [
-                  "logs",
-                  "-f",
-                  containerName,
-                ]);
-
-                logProcess.stdout.pipe(logStream);
-                logProcess.stderr.pipe(logStream);
-
-                let logBuffer = "";
-
-                const handleLogChunk = async (chunk) => {
-                  const logText = chunk.toString();
-                  logBuffer += logText;
-
-                  if (
-                    logText.includes("ReferenceError") ||
-                    logText.includes("is not defined") ||
-                    logText.includes("Module not found") ||
-                    logText.includes("Cannot find module") ||
-                    logText.includes("SyntaxError") ||
-                    logText.includes("Failed to compile") ||
-                    logText.includes("Traceback")
-                  ) {
-                    console.log(
-                      "❌ Runtime error detected. Sending to AI to fix..."
-                    );
-
-                    logProcess.kill();
-
-                    try {
-                      await fixSourceCodeWithAI(logBuffer, tempPath);
-                      console.log(
-                        "✅ AI fix complete. Rebuilding and restarting..."
-                      );
-
-                      exec(
-                        `docker build -t ${imageName} ${tempPath}`,
-                        (err3, stdout3, stderr3) => {
-                          if (err3) {
-                            if (!responded) {
-                              responded = true;
-                              return res.status(500).json({
-                                error: "Code fixed, but Docker rebuild failed.",
-                                buildError: stderr3,
-                              });
-                            }
-                          }
-                          runContainer("-retry");
-                        }
-                      );
-                    } catch (fixErr) {
-                      if (!responded) {
-                        responded = true;
-                        return res.status(500).json({
-                          error: "AI fix failed",
-                          logs: logBuffer,
-                          fixError: fixErr.message,
-                        });
-                      }
-                    }
-                  }
-                };
-
-                logProcess.stdout.on("data", handleLogChunk);
-                logProcess.stderr.on("data", handleLogChunk);
-
-                console.log(
-                  `✅ Container ${containerName} is running at port ${localPort}`
-                );
-
-                if (!responded) {
-                  responded = true;
-                  return res.json({
-                    id,
-                    previewUrl: `https://yourdomain.com/preview/${id}`,
-                    localPort,
-                  });
-                }
+          try {
+            await fixSourceCodeWithAI(logBuffer, tempPath);
+            console.log("✅ AI fix complete. Rebuilding and restarting...");
+            await exec(`docker build -t ${imageName} ${tempPath}`);
+            await runContainer("-retry");
+          } catch (err) {
+            if (!responded) {
+              responded = true;
+              return res.status(500).json({
+                error: "AI fix failed",
+                logs: logBuffer,
+                fixError: err.message,
               });
-            });
+            }
           }
         }
-      );
-    } catch (error) {
-      console.error("❌ Unhandled error during pipeline:", error);
-      if (!responded) {
-        return res
-          .status(500)
-          .json({ error: "Unhandled pipeline error", details: error.message });
+      };
+
+      logProcess.stdout.on("data", handleLogChunk);
+      logProcess.stderr.on("data", handleLogChunk);
+
+      console.log(`✅ Container ${containerName} is running on port ${localPort}`);
+      try {
+        const publicUrl = await ngrok.connect({ addr: localPort, proto: "http" });
+        console.log(`🌍 Public URL: ${publicUrl}`);
+
+        if (!responded) {
+          responded = true;
+          return res.json({ id, previewUrl: publicUrl, localPort });
+        }
+      } catch (ngrokError) {
+        console.error("❌ ngrok failed:", ngrokError.message);
+        if (!responded) {
+          responded = true;
+          return res.status(500).json({
+            error: "Container started, but ngrok tunnel failed",
+            details: ngrokError.message,
+          });
+        }
       }
     }
-  });
+  } catch (err) {
+    console.error("❌ Unhandled pipeline error:", err.message);
+    if (!responded) {
+      return res.status(500).json({ error: "Unhandled pipeline error", details: err.message });
+    }
+  }
 });
 
 app.get("/logs/:id", (req, res) => {
