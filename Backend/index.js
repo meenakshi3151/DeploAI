@@ -163,6 +163,52 @@ app.get("/logs/:id", (req, res) => {
   res.json({ logs });
 });
 
+app.post("/webhook", async (req, res) => {
+  const { repository } = req.body;
+
+  if (!repository || !repository.clone_url) {
+    return res.status(400).json({ error: "Invalid webhook payload" });
+  }
+
+  const repoUrl = repository.clone_url;
+  console.log(`🔔 Webhook triggered for repo: ${repoUrl}`);
+
+  const matched = fs
+    .readdirSync(WORKDIR)
+    .map(id => ({ id, full: path.join(WORKDIR, id) }))
+    .find(({ full }) => {
+      const gitConfig = path.join(full, ".git", "config");
+      return fs.existsSync(gitConfig) && fs.readFileSync(gitConfig, "utf8").includes(repoUrl);
+    });
+
+  if (!matched) {
+    return res.status(404).json({ error: "Matching deployed repo not found" });
+  }
+
+  const { id, full: repoPath } = matched;
+  const containerName = `container-${id}`;
+  const imageName = `image-${id}`;
+
+  try {
+    console.log("🔄 Pulling latest code...");
+    await exec(`cd ${repoPath} && git pull`);
+
+    console.log("🔧 Rebuilding Docker image...");
+    await exec(`docker build -t ${imageName} ${repoPath}`);
+
+    console.log("🔁 Restarting container...");
+    await exec(`docker rm -f ${containerName}`);
+    const runCmd = `docker run -d -p ${4000 + Math.floor(Math.random() * 1000)}:${3000} --name ${containerName} ${imageName}`;
+    await exec(runCmd);
+
+    console.log(`✅ Redeployment for ${repoUrl} complete`);
+    res.status(200).json({ message: "Redeployed successfully" });
+  } catch (err) {
+    console.error("❌ Deployment error:", err.message);
+    res.status(500).json({ error: "Deployment failed", details: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Backend running at http://localhost:${PORT}`);
 });
