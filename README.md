@@ -19,7 +19,7 @@ AutoDeploy AI is a beginner-friendly deployment platform that eliminates the com
 ---
 
 ## 🖥️ Presentation Link:
-<a href="[https://docs.google.com/document/d/1q_LBPiuw8-IA4X1Dm2E96WfQDCPOj8Ngu7Z2Sg2lDno/edit?tab=t.0](https://docs.google.com/presentation/d/1zBhQqBFoQzl-4kD-J8pMz41E66pHeo3U/edit?usp=sharing&ouid=109122800273363452990&rtpof=true&sd=true)">PPT link here</a>
+<a href="https://docs.google.com/document/d/1q_LBPiuw8-IA4X1Dm2E96WfQDCPOj8Ngu7Z2Sg2lDno/edit?tab=t.0](https://docs.google.com/presentation/d/1zBhQqBFoQzl-4kD-J8pMz41E66pHeo3U/edit?usp=sharing&ouid=109122800273363452990&rtpof=true&sd=true">PPT link here</a>
 
 ---
 
