@@ -11,8 +11,8 @@ const { v4: uuidv4 } = require("uuid");
 const exec = util.promisify(require("child_process").exec);
 const ngrok = require("ngrok");
 
-const { generateDockerfileFromRepo } = require("./dockerGen");
-const { fixSourceCodeWithAI } = require("./dockerFixer");
+const { generateDockerfileFromRepo } = require("./services/dockerGen");
+const { fixSourceCodeWithAI } = require("./services/dockerFixer");
 
 const app = express();
 const PORT = 5000;
