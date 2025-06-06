@@ -9,7 +9,7 @@ Empowering beginners to deploy full-stack apps effortlessly with AI-powered DevO
 
 ## 🧠 Introduction:
 
-AutoDeploy AI is a beginner-friendly deployment platform that eliminates the complexity of DevOps. Just paste your GitHub repo link and our AI will generate the Dockerfile, CI/CD pipeline, README.md, basic unit tests, and even debug your build errors. It also supports secure deployment with NGINX, HTTPS, and smart rollbacks.
+DeploAI is a beginner-friendly deployment platform that eliminates the complexity of DevOps. Just paste your GitHub repo link and our AI will generate the Dockerfile, CI/CD pipeline, README.md, basic unit tests, and even debug your build errors. It also supports secure deployment with NGINX, HTTPS, and smart rollbacks.
 
 ---
 
